@@ -230,13 +230,20 @@ func NewClient(cfg *config.Config, consulCatalog consul.CatalogAPI, consulServic
 		return nil, fmt.Errorf("node setup failed: %v", err)
 	}
 
+	fingerprintManager := &FingerprintManager{
+		getConfig: c.GetConfig,
+		node:      c.config.Node,
+		client:    c,
+		logger:    c.logger,
+	}
+
 	// Fingerprint the node
-	if err := c.fingerprint(); err != nil {
+	if err := c.fingerprint(fingerprintManager); err != nil {
 		return nil, fmt.Errorf("fingerprinting failed: %v", err)
 	}
 
 	// Scan for drivers
-	if err := c.setupDrivers(); err != nil {
+	if err := c.setupDrivers(fingerprintManager); err != nil {
 		return nil, fmt.Errorf("driver setup failed: %v", err)
 	}
 
@@ -925,7 +932,7 @@ func (c *Client) reservePorts() {
 }
 
 // fingerprint is used to fingerprint the client and setup the node
-func (c *Client) fingerprint() error {
+func (c *Client) fingerprint(fingerprintManager *FingerprintManager) error {
 	whitelist := c.config.ReadStringListToMap("fingerprint.whitelist")
 	whitelistEnabled := len(whitelist) > 0
 	blacklist := c.config.ReadStringListToMap("fingerprint.blacklist")
@@ -946,31 +953,12 @@ func (c *Client) fingerprint() error {
 			continue
 		}
 
-		f, err := fingerprint.NewFingerprint(name, c.logger)
-		if err != nil {
-			return err
-		}
-
 		// Apply the finerprint to our list so that we can log it later
 		appliedFingerprints = append(appliedFingerprints, name)
+	}
 
-		request := &cstructs.FingerprintRequest{Config: c.config, Node: c.config.Node}
-		var response cstructs.FingerprintResponse
-		err = f.Fingerprint(request, &response)
-		if err != nil {
-			return err
-		}
-
-		// add the diff found from each fingerprinter
-		c.updateNodeFromFingerprint(&response)
-
-		p, period := f.Periodic()
-		if p {
-			// TODO: If more periodic fingerprinters are added, then
-			// fingerprintPeriodic should be used to handle all the periodic
-			// fingerprinters by using a priority queue.
-			go c.fingerprintPeriodic(name, f, period)
-		}
+	if err := fingerprintManager.SetupFingerprints(appliedFingerprints); err != nil {
+		return err
 	}
 
 	c.logger.Printf("[DEBUG] client: applied fingerprints %v", appliedFingerprints)
@@ -980,30 +968,8 @@ func (c *Client) fingerprint() error {
 	return nil
 }
 
-// fingerprintPeriodic runs a fingerprinter at the specified duration.
-func (c *Client) fingerprintPeriodic(name string, f fingerprint.Fingerprint, d time.Duration) {
-	c.logger.Printf("[DEBUG] client: fingerprinting %v every %v", name, d)
-	for {
-		select {
-		case <-time.After(d):
-			request := &cstructs.FingerprintRequest{Config: c.config, Node: c.config.Node}
-			var response cstructs.FingerprintResponse
-			err := f.Fingerprint(request, &response)
-
-			if err != nil {
-				c.logger.Printf("[DEBUG] client: periodic fingerprinting for %v failed: %v", name, err)
-			} else {
-				c.updateNodeFromFingerprint(&response)
-			}
-
-		case <-c.shutdownCh:
-			return
-		}
-	}
-}
-
 // setupDrivers is used to find the available drivers
-func (c *Client) setupDrivers() error {
+func (c *Client) setupDrivers(fingerprintManager *FingerprintManager) error {
 	// Build the white/blacklists of drivers.
 	whitelist := c.config.ReadStringListToMap("driver.whitelist")
 	whitelistEnabled := len(whitelist) > 0
@@ -1011,7 +977,7 @@ func (c *Client) setupDrivers() error {
 
 	var availDrivers []string
 	var skippedDrivers []string
-	driverCtx := driver.NewDriverContext("", "", c.config, c.config.Node, c.logger, nil)
+
 	for name := range driver.BuiltinDrivers {
 		// Skip fingerprinting drivers that are not in the whitelist if it is
 		// enabled.
@@ -1025,28 +991,11 @@ func (c *Client) setupDrivers() error {
 			continue
 		}
 
-		// Add this driver to our list of available drivers so that we can log it
-		// later
 		availDrivers = append(availDrivers, name)
+	}
 
-		d, err := driver.NewDriver(name, driverCtx)
-		if err != nil {
-			return err
-		}
-
-		request := &cstructs.FingerprintRequest{Config: c.config, Node: c.config.Node}
-		var response cstructs.FingerprintResponse
-		if err := d.Fingerprint(request, &response); err != nil {
-			return err
-		}
-
-		c.updateNodeFromFingerprint(&response)
-
-		p, period := d.Periodic()
-		if p {
-			go c.fingerprintPeriodic(name, d, period)
-		}
-
+	if err := fingerprintManager.SetupDrivers(availDrivers); err != nil {
+		return err
 	}
 
 	c.logger.Printf("[DEBUG] client: available drivers %v", availDrivers)
