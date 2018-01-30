@@ -1876,7 +1876,7 @@ func TestAllocation_GCEligible(t *testing.T) {
 		alloc.DesiredStatus = tc.DesiredStatus
 		alloc.ClientStatus = tc.ClientStatus
 		alloc.RescheduleTracker = &structs.RescheduleTracker{tc.RescheduleTrackers}
-
+		alloc.NextAllocation = tc.NextAllocID
 		t.Run(tc.Desc, func(t *testing.T) {
 			if got := gcEligible(alloc, tc.ReschedulePolicy, tc.GCTime, tc.ThresholdIndex); got != tc.ShouldGC {
 				t.Fatalf("expected %v but got %v", tc.ShouldGC, got)
