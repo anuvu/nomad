@@ -162,6 +162,35 @@ func (a AllocIndexSort) Swap(i, j int) {
 	a[i], a[j] = a[j], a[i]
 }
 
+// RescheduleInfo is used to calculate remaining reschedule attempts
+// according to the given time and the task groups reschedule policy
+func (a Allocation) RescheduleInfo(t time.Time) (int, int) {
+	var reschedulePolicy *ReschedulePolicy
+	for _, tg := range a.Job.TaskGroups {
+		if *tg.Name == a.TaskGroup {
+			reschedulePolicy = tg.ReschedulePolicy
+		}
+	}
+	if reschedulePolicy == nil {
+		return 0, 0
+	}
+	availableAttempts := *reschedulePolicy.Attempts
+	interval := *reschedulePolicy.Interval
+	attempted := 0
+
+	// Loop over reschedule tracker to find attempts within the restart policy's interval
+	if a.RescheduleTracker != nil && availableAttempts > 0 && interval > 0 {
+		for j := len(a.RescheduleTracker.Events) - 1; j >= 0; j-- {
+			lastAttempt := a.RescheduleTracker.Events[j].RescheduleTime
+			timeDiff := t.UTC().UnixNano() - lastAttempt
+			if timeDiff < interval.Nanoseconds() {
+				attempted += 1
+			}
+		}
+	}
+	return attempted, availableAttempts
+}
+
 // RescheduleTracker encapsulates previous reschedule events
 type RescheduleTracker struct {
 	Events []*RescheduleEvent
