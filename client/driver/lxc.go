@@ -514,6 +514,10 @@ func (d *LxcDriver) executeContainer(ctx *ExecContext, c *lxc.Container, task *s
 	parsedArgs := ctx.TaskEnv.ParseAndReplace(executeConfig.CmdArgs)
 	d.logger.Printf("[INFO] env vars substituted in command \"%s\" - new command is \"%s\"", executeConfig.CmdArgs, parsedArgs)
 
+	if err := c.WantDaemonize(false); err != nil {
+		return nil, fmt.Errorf("unable to un-set daemonize"), removeConfigCleanup
+	}
+
 	if err := c.StartExecute(parsedArgs); err != nil {
 		return nil, fmt.Errorf("unable to execute with args '%v': %v", parsedArgs, err), removeConfigCleanup
 	}
