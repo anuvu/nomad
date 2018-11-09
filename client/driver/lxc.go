@@ -238,7 +238,7 @@ func (d *LxcDriver) validateVolumesConfig(volumes []interface{}) error {
 	for _, volDesc := range volumes {
 		volStr := volDesc.(string)
 		paths := strings.Split(volStr, ":")
-		if len(paths) != 2 {
+		if len(paths) < 2 || len(paths) > 3 {
 			return fmt.Errorf("invalid volume bind mount entry: '%s'", volStr)
 		}
 		if len(paths[0]) == 0 || len(paths[1]) == 0 {
@@ -600,18 +600,34 @@ func (d *LxcDriver) setCommonContainerConfig(ctx *ExecContext, c *lxc.Container,
 
 	for _, volDesc := range commonConfig.Volumes {
 		// the format was checked in Validate()
-		paths := strings.Split(volDesc, ":")
+		components := strings.Split(volDesc, ":")
+		srcPath := components[0]
+		destPath := components[1]
+		mode := "rw"
+		if len(components) == 3 {
+			mode = components[2]
+		}
 
-		if filepath.IsAbs(paths[0]) {
+		if filepath.IsAbs(srcPath) {
 			if !volumesEnabled {
 				return fmt.Errorf("absolute bind-mount volume in config but '%v' is false", lxcVolumesConfigOption)
 			}
 		} else {
 			// Relative source paths are treated as relative to alloc dir
-			paths[0] = filepath.Join(ctx.TaskDir.Dir, paths[0])
+			srcPath = filepath.Join(ctx.TaskDir.Dir, srcPath)
 		}
 
-		mounts = append(mounts, fmt.Sprintf("%s %s none rw,bind,create=dir", paths[0], paths[1]))
+		createType := "dir"
+		srcFileInfo, err := os.Stat(srcPath)
+		if err != nil {
+			return fmt.Errorf("couldn't Stat src='%s' in mount directive: %v", srcPath, err)
+		}
+
+		if srcFileInfo.Mode().IsRegular() {
+			createType = "file"
+		}
+
+		mounts = append(mounts, fmt.Sprintf("%s %s none %s,bind,create=%s", srcPath, destPath, mode, createType))
 	}
 
 	for _, mnt := range mounts {
