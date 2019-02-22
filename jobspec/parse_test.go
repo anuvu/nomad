@@ -7,12 +7,11 @@ import (
 	"testing"
 	"time"
 
+	capi "github.com/hashicorp/consul/api"
 	"github.com/hashicorp/nomad/api"
 	"github.com/hashicorp/nomad/helper"
 	"github.com/hashicorp/nomad/nomad/structs"
 	"github.com/kr/pretty"
-
-	capi "github.com/hashicorp/consul/api"
 )
 
 func TestParse(t *testing.T) {
@@ -51,14 +50,14 @@ func TestParse(t *testing.T) {
 						LTarget: "${meta.team}",
 						RTarget: "mobile",
 						Operand: "=",
-						Weight:  50,
+						Weight:  helper.Int8ToPtr(50),
 					},
 				},
 
 				Spreads: []*api.Spread{
 					{
 						Attribute: "${meta.rack}",
-						Weight:    100,
+						Weight:    helper.Int8ToPtr(100),
 						SpreadTarget: []*api.SpreadTarget{
 							{
 								Value:   "r1",
@@ -115,7 +114,7 @@ func TestParse(t *testing.T) {
 								LTarget: "${node.datacenter}",
 								RTarget: "dc2",
 								Operand: "=",
-								Weight:  100,
+								Weight:  helper.Int8ToPtr(100),
 							},
 						},
 						Meta: map[string]string{
@@ -132,7 +131,7 @@ func TestParse(t *testing.T) {
 						Spreads: []*api.Spread{
 							{
 								Attribute: "${node.datacenter}",
-								Weight:    50,
+								Weight:    helper.Int8ToPtr(50),
 								SpreadTarget: []*api.SpreadTarget{
 									{
 										Value:   "dc1",
@@ -190,7 +189,7 @@ func TestParse(t *testing.T) {
 										LTarget: "${meta.foo}",
 										RTarget: "a,b,c",
 										Operand: "set_contains",
-										Weight:  25,
+										Weight:  helper.Int8ToPtr(25),
 									},
 								},
 								Services: []*api.Service{
@@ -228,6 +227,31 @@ func TestParse(t *testing.T) {
 											MBits:         helper.IntToPtr(100),
 											ReservedPorts: []api.Port{{Label: "one", Value: 1}, {Label: "two", Value: 2}, {Label: "three", Value: 3}},
 											DynamicPorts:  []api.Port{{Label: "http", Value: 0}, {Label: "https", Value: 0}, {Label: "admin", Value: 0}},
+										},
+									},
+									Devices: []*api.RequestedDevice{
+										{
+											Name:  "nvidia/gpu",
+											Count: helper.Uint64ToPtr(10),
+											Constraints: []*api.Constraint{
+												{
+													LTarget: "${device.attr.memory}",
+													RTarget: "2GB",
+													Operand: ">",
+												},
+											},
+											Affinities: []*api.Affinity{
+												{
+													LTarget: "${device.model}",
+													RTarget: "1080ti",
+													Operand: "=",
+													Weight:  helper.Int8ToPtr(50),
+												},
+											},
+										},
+										{
+											Name:  "intel/gpu",
+											Count: nil,
 										},
 									},
 								},
@@ -292,7 +316,6 @@ func TestParse(t *testing.T) {
 								Resources: &api.Resources{
 									CPU:      helper.IntToPtr(500),
 									MemoryMB: helper.IntToPtr(128),
-									IOPS:     helper.IntToPtr(30),
 								},
 								Constraints: []*api.Constraint{
 									{

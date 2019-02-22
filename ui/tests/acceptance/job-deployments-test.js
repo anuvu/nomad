@@ -204,7 +204,7 @@ test('when open, a deployment shows a list of all task groups and their respecti
       assert.equal(taskGroupRow.unhealthy, taskGroup.unhealthyAllocs, 'Unhealthy Allocs');
       assert.equal(
         taskGroupRow.progress,
-        moment(taskGroup.requireProgressBy).format('MM/DD/YY HH:mm:ss'),
+        moment(taskGroup.requireProgressBy).format("MMM DD, 'YY HH:mm:ss ZZ"),
         'Progress By'
       );
     });
@@ -234,6 +234,21 @@ test('when open, a deployment shows a list of all allocations for the deployment
 
       assert.equal(allocationRow.shortId, allocation.id.split('-')[0], 'Allocation is as expected');
     });
+  });
+});
+
+test('when the job for the deployments is not found, an error message is shown, but the URL persists', function(assert) {
+  Deployments.visit({ id: 'not-a-real-job' });
+
+  andThen(() => {
+    assert.equal(
+      server.pretender.handledRequests.findBy('status', 404).url,
+      '/v1/job/not-a-real-job',
+      'A request to the nonexistent job is made'
+    );
+    assert.equal(currentURL(), '/jobs/not-a-real-job/deployments', 'The URL persists');
+    assert.ok(Deployments.error.isPresent, 'Error message is shown');
+    assert.equal(Deployments.error.title, 'Not Found', 'Error message is for 404');
   });
 });
 

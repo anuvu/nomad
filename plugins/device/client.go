@@ -3,12 +3,13 @@ package device
 import (
 	"context"
 	"io"
+	"time"
 
+	"github.com/LK4D4/joincontext"
+	"github.com/golang/protobuf/ptypes"
+	"github.com/hashicorp/nomad/helper/pluginutils/grpcutils"
 	"github.com/hashicorp/nomad/plugins/base"
 	"github.com/hashicorp/nomad/plugins/device/proto"
-	netctx "golang.org/x/net/context"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // devicePluginClient implements the client side of a remote device plugin, using
@@ -18,17 +19,23 @@ type devicePluginClient struct {
 	*base.BasePluginClient
 
 	client proto.DevicePluginClient
+
+	// doneCtx is closed when the plugin exits
+	doneCtx context.Context
 }
 
 // Fingerprint is used to retrieve the set of devices and their health from the
 // device plugin. An error may be immediately returned if the fingerprint call
 // could not be made or as part of the streaming response. If the context is
-// cancelled, the error will be propogated.
+// cancelled, the error will be propagated.
 func (d *devicePluginClient) Fingerprint(ctx context.Context) (<-chan *FingerprintResponse, error) {
+	// Join the passed context and the shutdown context
+	joinedCtx, _ := joincontext.Join(ctx, d.doneCtx)
+
 	var req proto.FingerprintRequest
-	stream, err := d.client.Fingerprint(ctx, &req)
+	stream, err := d.client.Fingerprint(joinedCtx, &req)
 	if err != nil {
-		return nil, err
+		return nil, grpcutils.HandleReqCtxGrpcErr(err, ctx, d.doneCtx)
 	}
 
 	out := make(chan *FingerprintResponse, 1)
@@ -40,32 +47,32 @@ func (d *devicePluginClient) Fingerprint(ctx context.Context) (<-chan *Fingerpri
 // the gRPC stream to a channel. Exits either when context is cancelled or the
 // stream has an error.
 func (d *devicePluginClient) handleFingerprint(
-	ctx netctx.Context,
+	reqCtx context.Context,
 	stream proto.DevicePlugin_FingerprintClient,
 	out chan *FingerprintResponse) {
 
+	defer close(out)
 	for {
 		resp, err := stream.Recv()
 		if err != nil {
-			// Handle a non-graceful stream error
 			if err != io.EOF {
-				if errStatus := status.FromContextError(ctx.Err()); errStatus.Code() == codes.Canceled {
-					err = context.Canceled
-				}
-
 				out <- &FingerprintResponse{
-					Error: err,
+					Error: grpcutils.HandleReqCtxGrpcErr(err, reqCtx, d.doneCtx),
 				}
 			}
 
 			// End the stream
-			close(out)
 			return
 		}
 
 		// Send the response
-		out <- &FingerprintResponse{
+		f := &FingerprintResponse{
 			Devices: convertProtoDeviceGroups(resp.GetDeviceGroup()),
+		}
+		select {
+		case <-reqCtx.Done():
+			return
+		case out <- f:
 		}
 	}
 }
@@ -77,9 +84,9 @@ func (d *devicePluginClient) Reserve(deviceIDs []string) (*ContainerReservation,
 	}
 
 	// Make the request
-	resp, err := d.client.Reserve(context.Background(), req)
+	resp, err := d.client.Reserve(d.doneCtx, req)
 	if err != nil {
-		return nil, err
+		return nil, grpcutils.HandleGrpcErr(err, d.doneCtx)
 	}
 
 	// Convert the response
@@ -90,12 +97,17 @@ func (d *devicePluginClient) Reserve(deviceIDs []string) (*ContainerReservation,
 // Stats is used to retrieve device statistics from the device plugin. An error
 // may be immediately returned if the stats call could not be made or as part of
 // the streaming response. If the context is cancelled, the error will be
-// propogated.
-func (d *devicePluginClient) Stats(ctx context.Context) (<-chan *StatsResponse, error) {
-	var req proto.StatsRequest
-	stream, err := d.client.Stats(ctx, &req)
+// propagated.
+func (d *devicePluginClient) Stats(ctx context.Context, interval time.Duration) (<-chan *StatsResponse, error) {
+	// Join the passed context and the shutdown context
+	joinedCtx, _ := joincontext.Join(ctx, d.doneCtx)
+
+	req := proto.StatsRequest{
+		CollectionInterval: ptypes.DurationProto(interval),
+	}
+	stream, err := d.client.Stats(joinedCtx, &req)
 	if err != nil {
-		return nil, err
+		return nil, grpcutils.HandleReqCtxGrpcErr(err, ctx, d.doneCtx)
 	}
 
 	out := make(chan *StatsResponse, 1)
@@ -107,32 +119,32 @@ func (d *devicePluginClient) Stats(ctx context.Context) (<-chan *StatsResponse, 
 // the gRPC stream to a channel. Exits either when context is cancelled or the
 // stream has an error.
 func (d *devicePluginClient) handleStats(
-	ctx netctx.Context,
+	reqCtx context.Context,
 	stream proto.DevicePlugin_StatsClient,
 	out chan *StatsResponse) {
 
+	defer close(out)
 	for {
 		resp, err := stream.Recv()
 		if err != nil {
-			// Handle a non-graceful stream error
 			if err != io.EOF {
-				if errStatus := status.FromContextError(ctx.Err()); errStatus.Code() == codes.Canceled {
-					err = context.Canceled
-				}
-
 				out <- &StatsResponse{
-					Error: err,
+					Error: grpcutils.HandleReqCtxGrpcErr(err, reqCtx, d.doneCtx),
 				}
 			}
 
 			// End the stream
-			close(out)
 			return
 		}
 
 		// Send the response
-		out <- &StatsResponse{
+		s := &StatsResponse{
 			Groups: convertProtoDeviceGroupsStats(resp.GetGroups()),
+		}
+		select {
+		case <-reqCtx.Done():
+			return
+		case out <- s:
 		}
 	}
 }

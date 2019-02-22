@@ -8,17 +8,17 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	hclog "github.com/hashicorp/go-hclog"
 	plugin "github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/hcl"
 	"github.com/hashicorp/hcl/hcl/ast"
-	hcl2 "github.com/hashicorp/hcl2/hcl"
 	"github.com/hashicorp/hcl2/hcldec"
+	"github.com/hashicorp/nomad/helper/pluginutils/hclspecutils"
+	"github.com/hashicorp/nomad/helper/pluginutils/hclutils"
 	"github.com/hashicorp/nomad/plugins/base"
 	"github.com/hashicorp/nomad/plugins/device"
-	"github.com/hashicorp/nomad/plugins/shared"
-	"github.com/hashicorp/nomad/plugins/shared/hclspec"
 	"github.com/kr/pretty"
 	"github.com/mitchellh/cli"
 	"github.com/zclconf/go-cty/cty/msgpack"
@@ -52,7 +52,7 @@ General Options:
 ` + generalOptionsUsage() + `
 
 Device Options:
-  
+
   -trace
     Enable trace level log output.
 `
@@ -119,7 +119,7 @@ func (c *Device) Run(args []string) int {
 	}
 	c.spec = spec
 
-	if err := c.setConfig(spec, config); err != nil {
+	if err := c.setConfig(spec, device.ApiVersion010, config, nil); err != nil {
 		c.logger.Error("failed to set config", "error", err)
 		return 1
 	}
@@ -175,7 +175,7 @@ func (c *Device) getSpec() (hcldec.Spec, error) {
 	c.logger.Trace("device spec", "spec", hclog.Fmt("% #v", pretty.Formatter(spec)))
 
 	// Convert the schema
-	schema, diag := hclspec.Convert(spec)
+	schema, diag := hclspecutils.Convert(spec)
 	if diag.HasErrors() {
 		errStr := "failed to convert HCL schema: "
 		for _, err := range diag.Errs() {
@@ -187,7 +187,7 @@ func (c *Device) getSpec() (hcldec.Spec, error) {
 	return schema, nil
 }
 
-func (c *Device) setConfig(spec hcldec.Spec, config []byte) error {
+func (c *Device) setConfig(spec hcldec.Spec, apiVersion string, config []byte, nmdCfg *base.AgentConfig) error {
 	// Parse the config into hcl
 	configVal, err := hclConfigToInterface(config)
 	if err != nil {
@@ -196,11 +196,7 @@ func (c *Device) setConfig(spec hcldec.Spec, config []byte) error {
 
 	c.logger.Trace("raw hcl config", "config", hclog.Fmt("% #v", pretty.Formatter(configVal)))
 
-	ctx := &hcl2.EvalContext{
-		Functions: shared.GetStdlibFuncs(),
-	}
-
-	val, diag := shared.ParseHclInterface(configVal, spec, ctx)
+	val, diag := hclutils.ParseHclInterface(configVal, spec, nil)
 	if diag.HasErrors() {
 		errStr := "failed to parse config"
 		for _, err := range diag.Errs() {
@@ -215,8 +211,14 @@ func (c *Device) setConfig(spec hcldec.Spec, config []byte) error {
 		return err
 	}
 
+	req := &base.Config{
+		PluginConfig: config,
+		AgentConfig:  nmdCfg,
+		ApiVersion:   apiVersion,
+	}
+
 	c.logger.Trace("msgpack config", "config", string(cdata))
-	if err := c.dev.SetConfig(cdata); err != nil {
+	if err := c.dev.SetConfig(req); err != nil {
 		return err
 	}
 
@@ -345,7 +347,7 @@ func (c *Device) replOutput(ctx context.Context, startFingerprint, startStats <-
 			c.Ui.Output(fmt.Sprintf("> fingerprint: % #v", pretty.Formatter(resp)))
 		case ctx := <-startStats:
 			var err error
-			stats, err = c.dev.Stats(ctx)
+			stats, err = c.dev.Stats(ctx, 1*time.Second)
 			if err != nil {
 				c.Ui.Error(fmt.Sprintf("stats: %s", err))
 				os.Exit(1)

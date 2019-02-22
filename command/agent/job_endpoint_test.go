@@ -130,7 +130,7 @@ func TestHTTP_JobsRegister(t *testing.T) {
 	t.Parallel()
 	httpTest(t, nil, func(s *TestAgent) {
 		// Create the job
-		job := api.MockJob()
+		job := MockJob()
 		args := api.JobRegisterRequest{
 			Job:          job,
 			WriteRequest: api.WriteRequest{Region: "global"},
@@ -185,7 +185,7 @@ func TestHTTP_JobsRegister_ACL(t *testing.T) {
 	t.Parallel()
 	httpACLTest(t, nil, func(s *TestAgent) {
 		// Create the job
-		job := api.MockJob()
+		job := MockJob()
 		args := api.JobRegisterRequest{
 			Job: job,
 			WriteRequest: api.WriteRequest{
@@ -215,7 +215,7 @@ func TestHTTP_JobsRegister_Defaulting(t *testing.T) {
 	t.Parallel()
 	httpTest(t, nil, func(s *TestAgent) {
 		// Create the job
-		job := api.MockJob()
+		job := MockJob()
 
 		// Do not set its priority
 		job.Priority = nil
@@ -411,7 +411,7 @@ func TestHTTP_JobUpdate(t *testing.T) {
 	t.Parallel()
 	httpTest(t, nil, func(s *TestAgent) {
 		// Create the job
-		job := api.MockJob()
+		job := MockJob()
 		args := api.JobRegisterRequest{
 			Job: job,
 			WriteRequest: api.WriteRequest{
@@ -985,7 +985,7 @@ func TestHTTP_JobPlan(t *testing.T) {
 	t.Parallel()
 	httpTest(t, nil, func(s *TestAgent) {
 		// Create the job
-		job := api.MockJob()
+		job := MockJob()
 		args := api.JobPlanRequest{
 			Job:  job,
 			Diff: true,
@@ -1216,7 +1216,7 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 				LTarget: "a",
 				RTarget: "b",
 				Operand: "c",
-				Weight:  50,
+				Weight:  helper.Int8ToPtr(50),
 			},
 		},
 		Update: &api.UpdateStrategy{
@@ -1232,7 +1232,7 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 		Spreads: []*api.Spread{
 			{
 				Attribute: "${meta.rack}",
-				Weight:    100,
+				Weight:    helper.Int8ToPtr(100),
 				SpreadTarget: []*api.SpreadTarget{
 					{
 						Value:   "r1",
@@ -1273,7 +1273,7 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 						LTarget: "x",
 						RTarget: "y",
 						Operand: "z",
-						Weight:  100,
+						Weight:  helper.Int8ToPtr(100),
 					},
 				},
 				RestartPolicy: &api.RestartPolicy{
@@ -1299,7 +1299,7 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 				Spreads: []*api.Spread{
 					{
 						Attribute: "${node.datacenter}",
-						Weight:    100,
+						Weight:    helper.Int8ToPtr(100),
 						SpreadTarget: []*api.SpreadTarget{
 							{
 								Value:   "dc1",
@@ -1348,7 +1348,7 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 								LTarget: "a",
 								RTarget: "b",
 								Operand: "c",
-								Weight:  50,
+								Weight:  helper.Int8ToPtr(50),
 							},
 						},
 
@@ -1414,6 +1414,31 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 											Value: 2000,
 										},
 									},
+								},
+							},
+							Devices: []*api.RequestedDevice{
+								{
+									Name:  "nvidia/gpu",
+									Count: helper.Uint64ToPtr(4),
+									Constraints: []*api.Constraint{
+										{
+											LTarget: "x",
+											RTarget: "y",
+											Operand: "z",
+										},
+									},
+									Affinities: []*api.Affinity{
+										{
+											LTarget: "a",
+											RTarget: "b",
+											Operand: "c",
+											Weight:  helper.Int8ToPtr(50),
+										},
+									},
+								},
+								{
+									Name:  "gpu",
+									Count: nil,
 								},
 							},
 						},
@@ -1688,6 +1713,31 @@ func TestJobs_ApiJobToStructsJob(t *testing.T) {
 											Value: 2000,
 										},
 									},
+								},
+							},
+							Devices: []*structs.RequestedDevice{
+								{
+									Name:  "nvidia/gpu",
+									Count: 4,
+									Constraints: []*structs.Constraint{
+										{
+											LTarget: "x",
+											RTarget: "y",
+											Operand: "z",
+										},
+									},
+									Affinities: []*structs.Affinity{
+										{
+											LTarget: "a",
+											RTarget: "b",
+											Operand: "c",
+											Weight:  50,
+										},
+									},
+								},
+								{
+									Name:  "gpu",
+									Count: 1,
 								},
 							},
 						},

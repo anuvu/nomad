@@ -19,7 +19,7 @@ moduleForAcceptance('Acceptance | client detail', {
     // Related models
     server.create('agent');
     server.create('job', { createAllocations: false });
-    server.createList('allocation', 3, { nodeId: node.id });
+    server.createList('allocation', 3, { nodeId: node.id, clientStatus: 'running' });
   },
 });
 
@@ -93,6 +93,16 @@ test('/clients/:id should list additional detail for the node below the title', 
   });
 });
 
+test('/clients/:id should include resource utilization graphs', function(assert) {
+  ClientDetail.visit({ id: node.id });
+
+  andThen(() => {
+    assert.equal(ClientDetail.resourceCharts.length, 2, 'Two resource utilization graphs');
+    assert.equal(ClientDetail.resourceCharts.objectAt(0).name, 'CPU', 'First chart is CPU');
+    assert.equal(ClientDetail.resourceCharts.objectAt(1).name, 'Memory', 'Second chart is Memory');
+  });
+});
+
 test('/clients/:id should list all allocations on the node', function(assert) {
   const allocationsCount = server.db.allocations.where({ nodeId: node.id }).length;
 
@@ -131,7 +141,7 @@ test('each allocation should have high-level details for the allocation', functi
     assert.equal(allocationRow.shortId, allocation.id.split('-')[0], 'Allocation short ID');
     assert.equal(
       allocationRow.createTime,
-      moment(allocation.createTime / 1000000).format('MM/DD HH:mm:ss'),
+      moment(allocation.createTime / 1000000).format('MMM DD HH:mm:ss ZZ'),
       'Allocation create time'
     );
     assert.equal(
@@ -309,7 +319,11 @@ test('each node event shows basic node event information', function(assert) {
 
   andThen(() => {
     const eventRow = ClientDetail.events.objectAt(0);
-    assert.equal(eventRow.time, moment(event.time).format('MM/DD/YY HH:mm:ss'), 'Event timestamp');
+    assert.equal(
+      eventRow.time,
+      moment(event.time).format("MMM DD, 'YY HH:mm:ss ZZ"),
+      'Event timestamp'
+    );
     assert.equal(eventRow.subsystem, event.subsystem, 'Event subsystem');
     assert.equal(eventRow.message, event.message, 'Event message');
   });
@@ -442,7 +456,7 @@ test('when the node has a drain strategy with a positive deadline, the drain sta
     );
 
     assert.ok(
-      ClientDetail.drain.forcedDeadline.includes(forceDeadline.format('MM/DD/YY HH:mm:ss')),
+      ClientDetail.drain.forcedDeadline.includes(forceDeadline.format("MMM DD, 'YY HH:mm:ss ZZ")),
       'Force deadline is shown as an absolute date'
     );
 
@@ -535,10 +549,14 @@ moduleForAcceptance('Acceptance | client detail (multi-namespace)', {
 
     // Make a job for each namespace, but have both scheduled on the same node
     server.create('job', { id: 'job-1', namespaceId: 'default', createAllocations: false });
-    server.createList('allocation', 3, { nodeId: node.id });
+    server.createList('allocation', 3, { nodeId: node.id, clientStatus: 'running' });
 
     server.create('job', { id: 'job-2', namespaceId: 'other-namespace', createAllocations: false });
-    server.createList('allocation', 3, { nodeId: node.id, jobId: 'job-2' });
+    server.createList('allocation', 3, {
+      nodeId: node.id,
+      jobId: 'job-2',
+      clientStatus: 'running',
+    });
   },
 });
 

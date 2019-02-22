@@ -12,6 +12,20 @@ var (
 	NodeDownErr = fmt.Errorf("node down")
 )
 
+const (
+	AllocDesiredStatusRun   = "run"   // Allocation should run
+	AllocDesiredStatusStop  = "stop"  // Allocation should stop
+	AllocDesiredStatusEvict = "evict" // Allocation should stop, and was evicted
+)
+
+const (
+	AllocClientStatusPending  = "pending"
+	AllocClientStatusRunning  = "running"
+	AllocClientStatusComplete = "complete"
+	AllocClientStatusFailed   = "failed"
+	AllocClientStatusLost     = "lost"
+)
+
 // Allocations is used to query the alloc-related endpoints.
 type Allocations struct {
 	client *Client
@@ -67,35 +81,38 @@ func (a *Allocations) GC(alloc *Allocation, q *QueryOptions) error {
 
 // Allocation is used for serialization of allocations.
 type Allocation struct {
-	ID                 string
-	Namespace          string
-	EvalID             string
-	Name               string
-	NodeID             string
-	JobID              string
-	Job                *Job
-	TaskGroup          string
-	Resources          *Resources
-	TaskResources      map[string]*Resources
-	Services           map[string]string
-	Metrics            *AllocationMetric
-	DesiredStatus      string
-	DesiredDescription string
-	DesiredTransition  DesiredTransition
-	ClientStatus       string
-	ClientDescription  string
-	TaskStates         map[string]*TaskState
-	DeploymentID       string
-	DeploymentStatus   *AllocDeploymentStatus
-	FollowupEvalID     string
-	PreviousAllocation string
-	NextAllocation     string
-	RescheduleTracker  *RescheduleTracker
-	CreateIndex        uint64
-	ModifyIndex        uint64
-	AllocModifyIndex   uint64
-	CreateTime         int64
-	ModifyTime         int64
+	ID                    string
+	Namespace             string
+	EvalID                string
+	Name                  string
+	NodeID                string
+	JobID                 string
+	Job                   *Job
+	TaskGroup             string
+	Resources             *Resources
+	TaskResources         map[string]*Resources
+	AllocatedResources    *AllocatedResources
+	Services              map[string]string
+	Metrics               *AllocationMetric
+	DesiredStatus         string
+	DesiredDescription    string
+	DesiredTransition     DesiredTransition
+	ClientStatus          string
+	ClientDescription     string
+	TaskStates            map[string]*TaskState
+	DeploymentID          string
+	DeploymentStatus      *AllocDeploymentStatus
+	FollowupEvalID        string
+	PreviousAllocation    string
+	NextAllocation        string
+	RescheduleTracker     *RescheduleTracker
+	PreemptedAllocations  []string
+	PreemptedByAllocation string
+	CreateIndex           uint64
+	ModifyIndex           uint64
+	AllocModifyIndex      uint64
+	CreateTime            int64
+	ModifyTime            int64
 }
 
 // AllocationMetric is used to deserialize allocation metrics.
@@ -130,8 +147,10 @@ type AllocationListStub struct {
 	ID                 string
 	EvalID             string
 	Name               string
+	Namespace          string
 	NodeID             string
 	JobID              string
+	JobType            string
 	JobVersion         uint64
 	TaskGroup          string
 	DesiredStatus      string
@@ -156,6 +175,29 @@ type AllocDeploymentStatus struct {
 	Timestamp   time.Time
 	Canary      bool
 	ModifyIndex uint64
+}
+
+type AllocatedResources struct {
+	Tasks  map[string]*AllocatedTaskResources
+	Shared AllocatedSharedResources
+}
+
+type AllocatedTaskResources struct {
+	Cpu      AllocatedCpuResources
+	Memory   AllocatedMemoryResources
+	Networks []*NetworkResource
+}
+
+type AllocatedSharedResources struct {
+	DiskMB int64
+}
+
+type AllocatedCpuResources struct {
+	CpuShares int64
+}
+
+type AllocatedMemoryResources struct {
+	MemoryMB int64
 }
 
 // AllocIndexSort reverse sorts allocs by CreateIndex.

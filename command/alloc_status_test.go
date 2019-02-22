@@ -96,7 +96,8 @@ func TestAllocStatusCommand_Run(t *testing.T) {
 			return false, err
 		}
 		for _, node := range nodes {
-			if node.Status == structs.NodeStatusReady {
+			if _, ok := node.Drivers["mock_driver"]; ok &&
+				node.Status == structs.NodeStatusReady {
 				return true, nil
 			}
 		}
@@ -247,7 +248,7 @@ func TestAllocStatusCommand_ScoreMetrics(t *testing.T) {
 
 	ui := new(cli.MockUi)
 	cmd := &AllocStatusCommand{Meta: Meta{Ui: ui}}
-	// Test reschedule attempt info
+	// Test node metrics
 	require := require.New(t)
 	state := srv.Agent.Server().State()
 	a := mock.Alloc()
@@ -280,7 +281,7 @@ func TestAllocStatusCommand_ScoreMetrics(t *testing.T) {
 	require.Contains(out, "Placement Metrics")
 	require.Contains(out, mockNode1.ID)
 	require.Contains(out, mockNode2.ID)
-	require.Contains(out, "Final Score")
+	require.Contains(out, "final score")
 }
 
 func TestAllocStatusCommand_AutocompleteArgs(t *testing.T) {

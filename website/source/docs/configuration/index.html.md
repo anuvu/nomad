@@ -16,15 +16,18 @@ files or directories to configure the Nomad agent.
 ## Load Order and Merging
 
 The Nomad agent supports multiple configuration files, which can be provided
-using the `-config` CLI flag. The flag can accept either a file or folder:
+using the `-config` CLI flag. The flag can accept either a file or folder. In
+the case of a folder, any `.hcl` and `.json` files in the folder will be loaded
+and merged in lexicographical order. Directories are not loaded recursively.
+
+For example:
 
 ```shell
 $ nomad agent -config=server.conf -config=/etc/nomad -config=extra.json
 ```
 
 This will load configuration from `server.conf`, from `.hcl` and `.json` files
-under `/etc/nomad`, and finally from `extra.json`. Files are loaded and merged
-in lexicographical order. Directories are not loaded recursively.
+under `/etc/nomad`, and finally from `extra.json`.
 
 As each file is processed, its contents are merged into the existing
 configuration. When merging, any non-empty values from the latest config file
@@ -137,6 +140,8 @@ testing.
   allocation data as well as cluster information. Server nodes use this
   directory to store cluster state, including the replicated log and snapshot
   data. This must be specified as an absolute path.
+  
+      ~> **WARNING**: This directory **must not** be set to a directory that is [included in the chroot](/docs/drivers/exec.html#chroot) if you use the [`exec`](/docs/drivers/exec.html) driver.
 
 - `disable_anonymous_signature` `(bool: false)` - Specifies if Nomad should
   provide an anonymous signature for de-duplication with the update check.
@@ -168,6 +173,8 @@ testing.
 - `log_level` `(string: "INFO")` - Specifies  the verbosity of logs the Nomad
   agent will output. Valid log levels include `WARN`, `INFO`, or `DEBUG` in
   increasing order of verbosity.
+
+- `log_json` `(bool: false)` - Output logs in a JSON format.
 
 - `name` `(string: [hostname])` - Specifies the name of the local node. This
   value is used to identify individual agents. When specified on a server, the

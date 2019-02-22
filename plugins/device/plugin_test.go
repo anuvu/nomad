@@ -8,9 +8,11 @@ import (
 
 	pb "github.com/golang/protobuf/proto"
 	plugin "github.com/hashicorp/go-plugin"
+	"github.com/hashicorp/nomad/helper"
 	"github.com/hashicorp/nomad/nomad/structs"
 	"github.com/hashicorp/nomad/plugins/base"
 	"github.com/hashicorp/nomad/plugins/shared/hclspec"
+	psstructs "github.com/hashicorp/nomad/plugins/shared/structs"
 	"github.com/hashicorp/nomad/testutil"
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
@@ -22,27 +24,30 @@ func TestDevicePlugin_PluginInfo(t *testing.T) {
 	t.Parallel()
 	require := require.New(t)
 
+	var (
+		apiVersions = []string{"v0.1.0", "v0.2.0"}
+	)
+
 	const (
-		apiVersion    = "v0.1.0"
 		pluginVersion = "v0.2.1"
-		pluginName    = "mock"
+		pluginName    = "mock_device"
 	)
 
 	knownType := func() (*base.PluginInfoResponse, error) {
 		info := &base.PluginInfoResponse{
-			Type:             base.PluginTypeDevice,
-			PluginApiVersion: apiVersion,
-			PluginVersion:    pluginVersion,
-			Name:             pluginName,
+			Type:              base.PluginTypeDevice,
+			PluginApiVersions: apiVersions,
+			PluginVersion:     pluginVersion,
+			Name:              pluginName,
 		}
 		return info, nil
 	}
 	unknownType := func() (*base.PluginInfoResponse, error) {
 		info := &base.PluginInfoResponse{
-			Type:             "bad",
-			PluginApiVersion: apiVersion,
-			PluginVersion:    pluginVersion,
-			Name:             pluginName,
+			Type:              "bad",
+			PluginApiVersions: apiVersions,
+			PluginVersion:     pluginVersion,
+			Name:              pluginName,
 		}
 		return info, nil
 	}
@@ -72,7 +77,7 @@ func TestDevicePlugin_PluginInfo(t *testing.T) {
 
 	resp, err := impl.PluginInfo()
 	require.NoError(err)
-	require.Equal(apiVersion, resp.PluginApiVersion)
+	require.Equal(apiVersions, resp.PluginApiVersions)
 	require.Equal(pluginVersion, resp.PluginVersion)
 	require.Equal(pluginName, resp.Name)
 	require.Equal(base.PluginTypeDevice, resp.Type)
@@ -125,11 +130,19 @@ func TestDevicePlugin_SetConfig(t *testing.T) {
 	var receivedData []byte
 	mock := &MockDevicePlugin{
 		MockPlugin: &base.MockPlugin{
+			PluginInfoF: func() (*base.PluginInfoResponse, error) {
+				return &base.PluginInfoResponse{
+					Type:              base.PluginTypeDevice,
+					PluginApiVersions: []string{"v0.0.1"},
+					PluginVersion:     "v0.0.1",
+					Name:              "mock_device",
+				}, nil
+			},
 			ConfigSchemaF: func() (*hclspec.Spec, error) {
 				return base.TestSpec, nil
 			},
-			SetConfigF: func(data []byte) error {
-				receivedData = data
+			SetConfigF: func(cfg *base.Config) error {
+				receivedData = cfg.PluginConfig
 				return nil
 			},
 		},
@@ -159,7 +172,7 @@ func TestDevicePlugin_SetConfig(t *testing.T) {
 	})
 	cdata, err := msgpack.Marshal(config, config.Type())
 	require.NoError(err)
-	require.NoError(impl.SetConfig(cdata))
+	require.NoError(impl.SetConfig(&base.Config{PluginConfig: cdata}))
 	require.Equal(cdata, receivedData)
 
 	// Decode the value back
@@ -179,6 +192,12 @@ func TestDevicePlugin_Fingerprint(t *testing.T) {
 			Vendor: "nvidia",
 			Type:   DeviceTypeGPU,
 			Name:   "foo",
+			Attributes: map[string]*psstructs.Attribute{
+				"memory": {
+					Int:  helper.Int64ToPtr(4),
+					Unit: "GiB",
+				},
+			},
 		},
 	}
 	devices2 := []*DeviceGroup{
@@ -455,9 +474,9 @@ func TestDevicePlugin_Stats(t *testing.T) {
 			Name:   "foo",
 			InstanceStats: map[string]*DeviceStats{
 				"1": {
-					Summary: &StatValue{
-						IntNumeratorVal:   10,
-						IntDenominatorVal: 20,
+					Summary: &psstructs.StatValue{
+						IntNumeratorVal:   helper.Int64ToPtr(10),
+						IntDenominatorVal: helper.Int64ToPtr(20),
 						Unit:              "MB",
 						Desc:              "Unit test",
 					},
@@ -472,9 +491,9 @@ func TestDevicePlugin_Stats(t *testing.T) {
 			Name:   "foo",
 			InstanceStats: map[string]*DeviceStats{
 				"1": {
-					Summary: &StatValue{
-						FloatNumeratorVal:   10.0,
-						FloatDenominatorVal: 20.0,
+					Summary: &psstructs.StatValue{
+						FloatNumeratorVal:   helper.Float64ToPtr(10.0),
+						FloatDenominatorVal: helper.Float64ToPtr(20.0),
 						Unit:                "MB",
 						Desc:                "Unit test",
 					},
@@ -487,8 +506,8 @@ func TestDevicePlugin_Stats(t *testing.T) {
 			Name:   "bar",
 			InstanceStats: map[string]*DeviceStats{
 				"1": {
-					Summary: &StatValue{
-						StringVal: "foo",
+					Summary: &psstructs.StatValue{
+						StringVal: helper.StringToPtr("foo"),
 						Unit:      "MB",
 						Desc:      "Unit test",
 					},
@@ -501,8 +520,8 @@ func TestDevicePlugin_Stats(t *testing.T) {
 			Name:   "baz",
 			InstanceStats: map[string]*DeviceStats{
 				"1": {
-					Summary: &StatValue{
-						BoolVal: true,
+					Summary: &psstructs.StatValue{
+						BoolVal: helper.BoolToPtr(true),
 						Unit:    "MB",
 						Desc:    "Unit test",
 					},
@@ -512,7 +531,7 @@ func TestDevicePlugin_Stats(t *testing.T) {
 	}
 
 	mock := &MockDevicePlugin{
-		StatsF: func(ctx context.Context) (<-chan *StatsResponse, error) {
+		StatsF: func(ctx context.Context, interval time.Duration) (<-chan *StatsResponse, error) {
 			outCh := make(chan *StatsResponse, 1)
 			go func() {
 				// Send two messages
@@ -552,7 +571,7 @@ func TestDevicePlugin_Stats(t *testing.T) {
 	defer cancel()
 
 	// Get the stream
-	stream, err := impl.Stats(ctx)
+	stream, err := impl.Stats(ctx, time.Millisecond)
 	require.NoError(err)
 
 	// Get the first message
@@ -591,7 +610,7 @@ func TestDevicePlugin_Stats_StreamErr(t *testing.T) {
 
 	ferr := fmt.Errorf("mock stats failed")
 	mock := &MockDevicePlugin{
-		StatsF: func(ctx context.Context) (<-chan *StatsResponse, error) {
+		StatsF: func(ctx context.Context, interval time.Duration) (<-chan *StatsResponse, error) {
 			outCh := make(chan *StatsResponse, 1)
 			go func() {
 				// Send the error
@@ -630,7 +649,7 @@ func TestDevicePlugin_Stats_StreamErr(t *testing.T) {
 	defer cancel()
 
 	// Get the stream
-	stream, err := impl.Stats(ctx)
+	stream, err := impl.Stats(ctx, time.Millisecond)
 	require.NoError(err)
 
 	// Get the first message
@@ -650,7 +669,7 @@ func TestDevicePlugin_Stats_CancelCtx(t *testing.T) {
 	require := require.New(t)
 
 	mock := &MockDevicePlugin{
-		StatsF: func(ctx context.Context) (<-chan *StatsResponse, error) {
+		StatsF: func(ctx context.Context, interval time.Duration) (<-chan *StatsResponse, error) {
 			outCh := make(chan *StatsResponse, 1)
 			go func() {
 				<-ctx.Done()
@@ -682,7 +701,7 @@ func TestDevicePlugin_Stats_CancelCtx(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Get the stream
-	stream, err := impl.Stats(ctx)
+	stream, err := impl.Stats(ctx, time.Millisecond)
 	require.NoError(err)
 
 	// Get the first message

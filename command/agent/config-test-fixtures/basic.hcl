@@ -4,6 +4,7 @@ name = "my-web"
 data_dir = "/tmp/nomad"
 plugin_dir = "/tmp/nomad-plugins"
 log_level = "ERR"
+log_json = true
 bind_addr = "192.168.0.1"
 enable_debug = true
 ports {
@@ -51,7 +52,6 @@ client {
 		cpu = 10
 		memory = 10
 		disk = 10
-		iops = 10
 		reserved_ports = "1,100,10-12"
 	}
 	client_min_port = 1000

@@ -196,6 +196,23 @@ job "binstore-storagelocker" {
           port "admin" {
           }
         }
+
+        device "nvidia/gpu" {
+            count = 10
+            constraint {
+              attribute = "${device.attr.memory}"
+              value = "2GB"
+              operator = ">"
+            }
+
+            affinity {
+              attribute = "${device.model}"
+              value     = "1080ti"
+              weight = 50
+            }
+        }
+        
+        device "intel/gpu" {}
       }
 
       kill_timeout = "22s"
@@ -253,7 +270,6 @@ job "binstore-storagelocker" {
       resources {
         cpu    = 500
         memory = 128
-        iops   = 30
       }
 
       constraint {

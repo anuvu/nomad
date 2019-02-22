@@ -1,12 +1,12 @@
 import { inject as service } from '@ember/service';
 import { computed } from '@ember/object';
+import { equal } from '@ember/object/computed';
 import Model from 'ember-data/model';
 import attr from 'ember-data/attr';
 import { belongsTo } from 'ember-data/relationships';
 import { fragment, fragmentArray } from 'ember-data-model-fragments/attributes';
 import intersection from 'lodash.intersection';
 import shortUUIDProperty from '../utils/properties/short-uuid';
-import AllocationStats from '../utils/classes/allocation-stats';
 
 const STATUS_ORDER = {
   pending: 1,
@@ -38,6 +38,8 @@ export default Model.extend({
   statusIndex: computed('clientStatus', function() {
     return STATUS_ORDER[this.get('clientStatus')] || 100;
   }),
+
+  isRunning: equal('clientStatus', 'running'),
 
   // When allocations are server-side rescheduled, a paper trail
   // is left linking all reschedule attempts.
@@ -73,18 +75,6 @@ export default Model.extend({
 
     return [];
   }),
-
-  fetchStats() {
-    return this.get('token')
-      .authorizedRequest(`/v1/client/allocation/${this.get('id')}/stats`)
-      .then(res => res.json())
-      .then(json => {
-        return new AllocationStats({
-          stats: json,
-          allocation: this,
-        });
-      });
-  },
 
   states: fragmentArray('task-state'),
   rescheduleEvents: fragmentArray('reschedule-event'),

@@ -85,6 +85,7 @@
 /docs/commands/server-join.html               /docs/commands/server/join.html
 /docs/commands/server-members.html            /docs/commands/server/members.html
 /docs/runtime/schedulers.html                 /docs/schedulers.html
+/docs/internals/scheduling.html               /docs/internals/scheduling/scheduling.html
 
 # Moved /docs/operating-a-job/ -> /guides/operating-a-job/
 /docs/operating-a-job                           /guides/operating-a-job/index.html
@@ -143,9 +144,9 @@
 /docs/service-discovery                       /guides/operations/consul-integration/index.html
 /docs/service-discovery/                      /guides/operations/consul-integration/index.html
 /docs/service-discovery/index.html            /guides/operations/consul-integration/index.html
-/docs/vault-integration                       /guides/operations/vault-integration/index.html
-/docs/vault-integration/                      /guides/operations/vault-integration/index.html
-/docs/vault-integration/index.html            /guides/operations/vault-integration/index.html
+
+# Redirect old LXC driver doc to new one in /docs/external
+/docs/drivers/lxc.html                        /docs/drivers/external/lxc.html
 
 # API
 /docs/http/index.html                   /api/index.html

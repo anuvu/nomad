@@ -64,8 +64,13 @@ func TestPrevAlloc_StreamAllocDir_TLS(t *testing.T) {
 	defer client2.Shutdown()
 
 	job := mock.Job()
-	job.Constraints[0].LTarget = "${node.unique.name}"
-	job.Constraints[0].RTarget = "client1"
+	job.Constraints = []*structs.Constraint{
+		{
+			LTarget: "${node.unique.name}",
+			RTarget: "client1",
+			Operand: "=",
+		},
+	}
 	job.TaskGroups[0].Count = 1
 	job.TaskGroups[0].EphemeralDisk.Sticky = true
 	job.TaskGroups[0].EphemeralDisk.Migrate = true
@@ -99,7 +104,10 @@ func TestPrevAlloc_StreamAllocDir_TLS(t *testing.T) {
 
 	// Migrate alloc to other node
 	job.Constraints[0].RTarget = "client2"
-	testutil.WaitForRunning(t, server.RPC, job.Copy())
+
+	// Only register job - don't wait for running - since previous completed allocs
+	// will interfere
+	testutil.RegisterJob(t, server.RPC, job.Copy())
 
 	// Wait for new alloc to be running
 	var newAlloc *structs.AllocListStub

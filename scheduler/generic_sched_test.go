@@ -86,14 +86,19 @@ func TestServiceSched_JobRegister(t *testing.T) {
 	}
 
 	// Ensure different ports were used.
-	used := make(map[int]struct{})
+	used := make(map[int]map[string]struct{})
 	for _, alloc := range out {
 		for _, resource := range alloc.TaskResources {
 			for _, port := range resource.Networks[0].DynamicPorts {
-				if _, ok := used[port.Value]; ok {
-					t.Fatalf("Port collision %v", port.Value)
+				nodeMap, ok := used[port.Value]
+				if !ok {
+					nodeMap = make(map[string]struct{})
+					used[port.Value] = nodeMap
 				}
-				used[port.Value] = struct{}{}
+				if _, ok := nodeMap[alloc.NodeID]; ok {
+					t.Fatalf("Port collision on node %q %v", alloc.NodeID, port.Value)
+				}
+				nodeMap[alloc.NodeID] = struct{}{}
 			}
 		}
 	}
@@ -239,6 +244,10 @@ func TestServiceSched_JobRegister_DiskConstraints(t *testing.T) {
 	// Ensure the eval has a blocked eval
 	if len(h.CreateEvals) != 1 {
 		t.Fatalf("bad: %#v", h.CreateEvals)
+	}
+
+	if h.CreateEvals[0].TriggeredBy != structs.EvalTriggerQueuedAllocs {
+		t.Fatalf("bad: %#v", h.CreateEvals[0])
 	}
 
 	// Ensure the plan allocated only one allocation
@@ -606,14 +615,14 @@ func TestServiceSched_JobRegister_DistinctProperty_TaskGroup_Incr(t *testing.T) 
 func TestServiceSched_Spread(t *testing.T) {
 	assert := assert.New(t)
 
-	start := uint32(100)
-	step := uint32(10)
+	start := uint8(100)
+	step := uint8(10)
 
 	for i := 0; i < 10; i++ {
 		name := fmt.Sprintf("%d%% in dc1", start)
 		t.Run(name, func(t *testing.T) {
 			h := NewHarness(t)
-			remaining := uint32(100 - start)
+			remaining := uint8(100 - start)
 			// Create a job that uses spread over data center
 			job := mock.Job()
 			job.Datacenters = []string{"dc1", "dc2"}
@@ -977,7 +986,11 @@ func TestServiceSched_JobRegister_CreateBlockedEval(t *testing.T) {
 
 	// Create a full node
 	node := mock.Node()
-	node.Reserved = node.Resources
+	node.ReservedResources = &structs.NodeReservedResources{
+		Cpu: structs.NodeReservedCpuResources{
+			CpuShares: node.NodeResources.Cpu.CpuShares,
+		},
+	}
 	node.ComputeClass()
 	noErr(t, h.State.UpsertNode(h.NextIndex(), node))
 
@@ -1504,7 +1517,7 @@ func TestServiceSched_JobModify_IncrCount_NodeLimit(t *testing.T) {
 
 	// Create one node
 	node := mock.Node()
-	node.Resources.CPU = 1000
+	node.NodeResources.Cpu.CpuShares = 1000
 	noErr(t, h.State.UpsertNode(h.NextIndex(), node))
 
 	// Generate a fake job with one allocation
@@ -1519,7 +1532,7 @@ func TestServiceSched_JobModify_IncrCount_NodeLimit(t *testing.T) {
 	alloc.JobID = job.ID
 	alloc.NodeID = node.ID
 	alloc.Name = "my-job.web[0]"
-	alloc.Resources.CPU = 256
+	alloc.AllocatedResources.Tasks["web"].Cpu.CpuShares = 256
 	allocs = append(allocs, alloc)
 	noErr(t, h.State.UpsertAllocs(h.NextIndex(), allocs))
 
@@ -1800,24 +1813,41 @@ func TestServiceSched_JobModify_Rolling(t *testing.T) {
 func TestServiceSched_JobModify_Rolling_FullNode(t *testing.T) {
 	h := NewHarness(t)
 
-	// Create a node
+	// Create a node and clear the reserved resources
 	node := mock.Node()
+	node.ReservedResources = nil
 	noErr(t, h.State.UpsertNode(h.NextIndex(), node))
 
-	resourceAsk := node.Resources.Copy()
-	resourceAsk.CPU -= node.Reserved.CPU
-	resourceAsk.MemoryMB -= node.Reserved.MemoryMB
-	resourceAsk.DiskMB -= node.Reserved.DiskMB
-	resourceAsk.Networks = nil
+	// Create a resource ask that is the same as the resources available on the
+	// node
+	cpu := node.NodeResources.Cpu.CpuShares
+	mem := node.NodeResources.Memory.MemoryMB
+
+	request := &structs.Resources{
+		CPU:      int(cpu),
+		MemoryMB: int(mem),
+	}
+	allocated := &structs.AllocatedResources{
+		Tasks: map[string]*structs.AllocatedTaskResources{
+			"web": {
+				Cpu: structs.AllocatedCpuResources{
+					CpuShares: cpu,
+				},
+				Memory: structs.AllocatedMemoryResources{
+					MemoryMB: mem,
+				},
+			},
+		},
+	}
 
 	// Generate a fake job with one alloc that consumes the whole node
 	job := mock.Job()
 	job.TaskGroups[0].Count = 1
-	job.TaskGroups[0].Tasks[0].Resources = resourceAsk
+	job.TaskGroups[0].Tasks[0].Resources = request
 	noErr(t, h.State.UpsertJob(h.NextIndex(), job))
 
 	alloc := mock.Alloc()
-	alloc.Resources = resourceAsk
+	alloc.AllocatedResources = allocated
 	alloc.Job = job
 	alloc.JobID = job.ID
 	alloc.NodeID = node.ID
@@ -1834,7 +1864,7 @@ func TestServiceSched_JobModify_Rolling_FullNode(t *testing.T) {
 		MinHealthyTime:  10 * time.Second,
 		HealthyDeadline: 10 * time.Minute,
 	}
-	job2.TaskGroups[0].Tasks[0].Resources = mock.Alloc().Resources
+	job2.TaskGroups[0].Tasks[0].Resources = mock.Job().TaskGroups[0].Tasks[0].Resources
 
 	// Update the task, such that it cannot be done in-place
 	job2.TaskGroups[0].Tasks[0].Config["command"] = "/bin/other"
@@ -1876,7 +1906,7 @@ func TestServiceSched_JobModify_Rolling_FullNode(t *testing.T) {
 	for _, allocList := range plan.NodeAllocation {
 		planned = append(planned, allocList...)
 	}
-	if len(planned) != 1 {
+	if len(planned) != 5 {
 		t.Fatalf("bad: %#v", plan)
 	}
 
@@ -1895,7 +1925,7 @@ func TestServiceSched_JobModify_Rolling_FullNode(t *testing.T) {
 	if !ok {
 		t.Fatalf("bad: %#v", plan)
 	}
-	if state.DesiredTotal != 1 && state.DesiredCanaries != 0 {
+	if state.DesiredTotal != 5 || state.DesiredCanaries != 0 {
 		t.Fatalf("bad: %#v", state)
 	}
 }

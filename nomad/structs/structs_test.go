@@ -9,8 +9,9 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/api"
-	"github.com/hashicorp/go-multierror"
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/nomad/helper/uuid"
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -800,7 +801,6 @@ func TestTask_Validate(t *testing.T) {
 		Resources: &Resources{
 			CPU:      100,
 			MemoryMB: 100,
-			IOPS:     10,
 		},
 		LogConfig: DefaultLogConfig(),
 	}
@@ -874,7 +874,6 @@ func TestTask_Validate_Services(t *testing.T) {
 		Resources: &Resources{
 			CPU:      100,
 			MemoryMB: 100,
-			IOPS:     10,
 		},
 		Services: []*Service{s1, s2},
 	}
@@ -1571,13 +1570,15 @@ func TestConstraint_Validate(t *testing.T) {
 		t.Fatalf("expected valid constraint: %v", err)
 	}
 
-	// Perform set_contains validation
-	c.Operand = ConstraintSetContains
+	// Perform set_contains* validation
 	c.RTarget = ""
-	err = c.Validate()
-	mErr = err.(*multierror.Error)
-	if !strings.Contains(mErr.Errors[0].Error(), "requires an RTarget") {
-		t.Fatalf("err: %s", err)
+	for _, o := range []string{ConstraintSetContains, ConstraintSetContainsAll, ConstraintSetContainsAny} {
+		c.Operand = o
+		err = c.Validate()
+		mErr = err.(*multierror.Error)
+		if !strings.Contains(mErr.Errors[0].Error(), "requires an RTarget") {
+			t.Fatalf("err: %s", err)
+		}
 	}
 
 	// Perform LTarget validation
@@ -1642,7 +1643,7 @@ func TestAffinity_Validate(t *testing.T) {
 				Operand: "=",
 				LTarget: "${meta.node_class}",
 				RTarget: "c4",
-				Weight:  500,
+				Weight:  110,
 			},
 			err: fmt.Errorf("Affinity weight must be within the range [-100,100]"),
 		},
@@ -1659,7 +1660,7 @@ func TestAffinity_Validate(t *testing.T) {
 				Operand: "version",
 				LTarget: "${meta.os}",
 				RTarget: ">>2.0",
-				Weight:  500,
+				Weight:  110,
 			},
 			err: fmt.Errorf("Version affinity is invalid"),
 		},
@@ -1750,13 +1751,11 @@ func TestResource_Superset(t *testing.T) {
 		CPU:      2000,
 		MemoryMB: 2048,
 		DiskMB:   10000,
-		IOPS:     100,
 	}
 	r2 := &Resources{
 		CPU:      2000,
 		MemoryMB: 1024,
 		DiskMB:   5000,
-		IOPS:     50,
 	}
 
 	if s, _ := r1.Superset(r1); !s {
@@ -1778,7 +1777,6 @@ func TestResource_Add(t *testing.T) {
 		CPU:      2000,
 		MemoryMB: 2048,
 		DiskMB:   10000,
-		IOPS:     100,
 		Networks: []*NetworkResource{
 			{
 				CIDR:          "10.0.0.0/8",
@@ -1791,7 +1789,6 @@ func TestResource_Add(t *testing.T) {
 		CPU:      2000,
 		MemoryMB: 1024,
 		DiskMB:   5000,
-		IOPS:     50,
 		Networks: []*NetworkResource{
 			{
 				IP:            "10.0.0.1",
@@ -1810,7 +1807,6 @@ func TestResource_Add(t *testing.T) {
 		CPU:      3000,
 		MemoryMB: 3072,
 		DiskMB:   15000,
-		IOPS:     150,
 		Networks: []*NetworkResource{
 			{
 				CIDR:          "10.0.0.0/8",
@@ -1865,6 +1861,75 @@ func TestResource_Add_Network(t *testing.T) {
 	if !reflect.DeepEqual(expect.Networks, r1.Networks) {
 		t.Fatalf("bad: %#v %#v", expect.Networks[0], r1.Networks[0])
 	}
+}
+
+func TestComparableResources_Subtract(t *testing.T) {
+	r1 := &ComparableResources{
+		Flattened: AllocatedTaskResources{
+			Cpu: AllocatedCpuResources{
+				CpuShares: 2000,
+			},
+			Memory: AllocatedMemoryResources{
+				MemoryMB: 2048,
+			},
+			Networks: []*NetworkResource{
+				{
+					CIDR:          "10.0.0.0/8",
+					MBits:         100,
+					ReservedPorts: []Port{{"ssh", 22}},
+				},
+			},
+		},
+		Shared: AllocatedSharedResources{
+			DiskMB: 10000,
+		},
+	}
+
+	r2 := &ComparableResources{
+		Flattened: AllocatedTaskResources{
+			Cpu: AllocatedCpuResources{
+				CpuShares: 1000,
+			},
+			Memory: AllocatedMemoryResources{
+				MemoryMB: 1024,
+			},
+			Networks: []*NetworkResource{
+				{
+					CIDR:          "10.0.0.0/8",
+					MBits:         20,
+					ReservedPorts: []Port{{"ssh", 22}},
+				},
+			},
+		},
+		Shared: AllocatedSharedResources{
+			DiskMB: 5000,
+		},
+	}
+	r1.Subtract(r2)
+
+	expect := &ComparableResources{
+		Flattened: AllocatedTaskResources{
+			Cpu: AllocatedCpuResources{
+				CpuShares: 1000,
+			},
+			Memory: AllocatedMemoryResources{
+				MemoryMB: 1024,
+			},
+			Networks: []*NetworkResource{
+				{
+					CIDR:          "10.0.0.0/8",
+					MBits:         100,
+					ReservedPorts: []Port{{"ssh", 22}},
+				},
+			},
+		},
+		Shared: AllocatedSharedResources{
+			DiskMB: 5000,
+		},
+	}
+
+	require := require.New(t)
+	require.Equal(expect, r1)
 }
 
 func TestEncodeDecode(t *testing.T) {
@@ -2543,6 +2608,93 @@ func TestTaskArtifact_Validate_Dest(t *testing.T) {
 	}
 }
 
+// TestTaskArtifact_Hash asserts an artifact's hash changes when any of the
+// fields change.
+func TestTaskArtifact_Hash(t *testing.T) {
+	t.Parallel()
+
+	cases := []TaskArtifact{
+		{},
+		{
+			GetterSource: "a",
+		},
+		{
+			GetterSource: "b",
+		},
+		{
+			GetterSource:  "b",
+			GetterOptions: map[string]string{"c": "c"},
+		},
+		{
+			GetterSource: "b",
+			GetterOptions: map[string]string{
+				"c": "c",
+				"d": "d",
+			},
+		},
+		{
+			GetterSource: "b",
+			GetterOptions: map[string]string{
+				"c": "c",
+				"d": "e",
+			},
+		},
+		{
+			GetterSource: "b",
+			GetterOptions: map[string]string{
+				"c": "c",
+				"d": "e",
+			},
+			GetterMode: "f",
+		},
+		{
+			GetterSource: "b",
+			GetterOptions: map[string]string{
+				"c": "c",
+				"d": "e",
+			},
+			GetterMode: "g",
+		},
+		{
+			GetterSource: "b",
+			GetterOptions: map[string]string{
+				"c": "c",
+				"d": "e",
+			},
+			GetterMode:   "g",
+			RelativeDest: "h",
+		},
+		{
+			GetterSource: "b",
+			GetterOptions: map[string]string{
+				"c": "c",
+				"d": "e",
+			},
+			GetterMode:   "g",
+			RelativeDest: "i",
+		},
+	}
+
+	// Map of hash to source
+	hashes := make(map[string]TaskArtifact, len(cases))
+	for _, tc := range cases {
+		h := tc.Hash()
+
+		// Hash should be deterministic
+		require.Equal(t, h, tc.Hash())
+
+		// Hash should be unique
+		if orig, ok := hashes[h]; ok {
+			require.Failf(t, "hashes match", "artifact 1: %s\n\n artifact 2: %s\n",
+				pretty.Sprint(tc), pretty.Sprint(orig),
+			)
+		}
+		hashes[h] = tc
+	}
+
+	require.Len(t, hashes, len(cases))
+}
+
 func TestAllocation_ShouldMigrate(t *testing.T) {
 	alloc := Allocation{
 		PreviousAllocation: "123",
@@ -2669,6 +2821,15 @@ func TestTaskArtifact_Validate_Checksum(t *testing.T) {
 				},
 			},
 			true,
+		},
+		{
+			&TaskArtifact{
+				GetterSource: "foo.com",
+				GetterOptions: map[string]string{
+					"checksum": "md5:${ARTIFACT_CHECKSUM}",
+				},
+			},
+			false,
 		},
 	}
 
@@ -3893,7 +4054,6 @@ func TestNode_Copy(t *testing.T) {
 			CPU:      4000,
 			MemoryMB: 8192,
 			DiskMB:   100 * 1024,
-			IOPS:     150,
 			Networks: []*NetworkResource{
 				{
 					Device: "eth0",
@@ -3913,6 +4073,38 @@ func TestNode_Copy(t *testing.T) {
 					ReservedPorts: []Port{{Label: "ssh", Value: 22}},
 					MBits:         1,
 				},
+			},
+		},
+		NodeResources: &NodeResources{
+			Cpu: NodeCpuResources{
+				CpuShares: 4000,
+			},
+			Memory: NodeMemoryResources{
+				MemoryMB: 8192,
+			},
+			Disk: NodeDiskResources{
+				DiskMB: 100 * 1024,
+			},
+			Networks: []*NetworkResource{
+				{
+					Device: "eth0",
+					CIDR:   "192.168.0.100/32",
+					MBits:  1000,
+				},
+			},
+		},
+		ReservedResources: &NodeReservedResources{
+			Cpu: NodeReservedCpuResources{
+				CpuShares: 100,
+			},
+			Memory: NodeReservedMemoryResources{
+				MemoryMB: 256,
+			},
+			Disk: NodeReservedDiskResources{
+				DiskMB: 4 * 1024,
+			},
+			Networks: NodeReservedNetworkResources{
+				ReservedHostPorts: "22",
 			},
 		},
 		Links: map[string]string{
@@ -3974,7 +4166,7 @@ func TestSpread_Validate(t *testing.T) {
 		{
 			spread: &Spread{
 				Attribute: "${node.datacenter}",
-				Weight:    200,
+				Weight:    110,
 			},
 			err:  fmt.Errorf("Spread stanza must have a positive weight from 0 to 100"),
 			name: "Invalid weight",
@@ -4063,5 +4255,51 @@ func TestSpread_Validate(t *testing.T) {
 				require.Nil(t, err)
 			}
 		})
+	}
+}
+
+func TestNodeReservedNetworkResources_ParseReserved(t *testing.T) {
+	require := require.New(t)
+	cases := []struct {
+		Input  string
+		Parsed []uint64
+		Err    bool
+	}{
+		{
+			"1,2,3",
+			[]uint64{1, 2, 3},
+			false,
+		},
+		{
+			"3,1,2,1,2,3,1-3",
+			[]uint64{1, 2, 3},
+			false,
+		},
+		{
+			"3-1",
+			nil,
+			true,
+		},
+		{
+			"1-3,2-4",
+			[]uint64{1, 2, 3, 4},
+			false,
+		},
+		{
+			"1-3,4,5-5,6,7,8-10",
+			[]uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			false,
+		},
+	}
+
+	for i, tc := range cases {
+		r := &NodeReservedNetworkResources{ReservedHostPorts: tc.Input}
+		out, err := r.ParseReservedHostPorts()
+		if (err != nil) != tc.Err {
+			t.Fatalf("test case %d: %v", i, err)
+			continue
+		}
+
+		require.Equal(out, tc.Parsed)
 	}
 }

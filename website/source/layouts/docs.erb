@@ -10,7 +10,17 @@
           </li>
 
           <li<%= sidebar_current("docs-internals-scheduling") %>>
-            <a href="/docs/internals/scheduling.html">Scheduling</a>
+           <a href="/docs/internals/scheduling/index.html">Scheduling</a>
+                  <ul class="nav">
+                    <li <%= sidebar_current("docs-internals-scheduling-internals") %>>
+                      <a href="/docs/internals/scheduling/scheduling.html">Internals</a>
+                    </li>
+                    <li <%= sidebar_current("docs-configuration-autopilot") %>>
+                      <a href="/docs/internals/scheduling/preemption.html">Preemption
+                      <sup>0.9 Beta</sup>
+                      </a>
+                    </li>
+                  </ul>
           </li>
 
           <li<%= sidebar_current("docs-internals-consensus") %>>
@@ -39,7 +49,9 @@
             <a href="/docs/configuration/consul.html">consul</a>
           </li>
           <li <%= sidebar_current("docs-configuration-plugin") %>>
-            <a href="/docs/configuration/plugin.html">plugin</a>
+            <a href="/docs/configuration/plugin.html">plugin
+            <sup>0.9 Beta</sup>
+            </a>
           </li>
           <li <%= sidebar_current("docs-configuration-sentinel") %>>
             <a href="/docs/configuration/sentinel.html">sentinel</a>
@@ -324,11 +336,19 @@
           <li<%= sidebar_current("docs-job-specification-artifact")%>>
             <a href="/docs/job-specification/artifact.html">artifact</a>
           </li>
+          <li<%= sidebar_current("docs-job-specification-affinity")%>>
+            <a href="/docs/job-specification/affinity.html">affinity
+            <sup>0.9 Beta</sup>
+            </a>
+          </li>
           <li<%= sidebar_current("docs-job-specification-check_restart")%>>
             <a href="/docs/job-specification/check_restart.html">check_restart</a>
           </li>
           <li<%= sidebar_current("docs-job-specification-constraint")%>>
             <a href="/docs/job-specification/constraint.html">constraint</a>
+          </li>
+          <li<%= sidebar_current("docs-job-specification-device")%>>
+            <a href="/docs/job-specification/device.html">device</a>
           </li>
           <li<%= sidebar_current("docs-job-specification-dispatch-payload")%>>
             <a href="/docs/job-specification/dispatch_payload.html">dispatch_payload</a>
@@ -375,6 +395,11 @@
           <li<%= sidebar_current("docs-job-specification-service")%>>
             <a href="/docs/job-specification/service.html">service</a>
           </li>
+          <li<%= sidebar_current("docs-job-specification-spread")%>>
+            <a href="/docs/job-specification/spread.html">spread
+            <sup>0.9 Beta</sup>
+            </a>
+          </li>
           <li<%= sidebar_current("docs-job-specification-task")%>>
             <a href="/docs/job-specification/task.html">task</a>
           </li>
@@ -405,10 +430,6 @@
             <a href="/docs/drivers/java.html">Java</a>
           </li>
 
-          <li<%= sidebar_current("docs-drivers-lxc") %>>
-            <a href="/docs/drivers/lxc.html">LXC</a>
-          </li>
-
           <li<%= sidebar_current("docs-drivers-qemu") %>>
             <a href="/docs/drivers/qemu.html">Qemu</a>
           </li>
@@ -422,8 +443,18 @@
             <a href="/docs/drivers/rkt.html">Rkt</a>
           </li>
 
-          <li<%= sidebar_current("docs-drivers-custom") %>>
-            <a href="/docs/drivers/custom.html">Custom</a>
+        </ul>
+      </li>
+
+      <li<%= sidebar_current("docs-devices") %>>
+        <a href="/docs/devices/index.html">Device Plugins</a>
+        <ul class="nav">
+          <li<%= sidebar_current("docs-devices-nvidia") %>>
+            <a href="/docs/devices/nvidia.html">Nvidia</a>
+          </li>
+
+          <li<%= sidebar_current("docs-devices-community") %>>
+            <a href="/docs/devices/community.html">Community Supported</a>
           </li>
         </ul>
       </li>
@@ -436,8 +467,25 @@
         <a href="/docs/runtime/environment.html">Runtime Environment</a>
       </li>
       
+      <li<%= sidebar_current("docs-telemetry") %>>
+        <a href="/docs/telemetry/index.html">Telemetry</a>
+      </li>
+
       <li<%= sidebar_current("docs-variable-interpolation") %>>
         <a href="/docs/runtime/interpolation.html">Variable Interpolation</a>
+      </li>
+
+      <li<%= sidebar_current("docs-vault-integration") %>>
+        <a href="/docs/vault-integration/index.html">Vault Integration</a>
+      </li>
+
+      <li<%= sidebar_current("docs-external-plugins") %>>
+        <a href="/docs/drivers/external/index.html">External Plugins</a>
+        <ul class="nav">
+          <li<%= sidebar_current("docs-external-plugins-lxc") %>>
+            <a href="/docs/drivers/external/lxc.html">LXC</a>
+          </li>
+        </ul>
       </li>
 
       <hr>

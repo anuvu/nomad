@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/nomad/helper/pluginutils/grpcutils"
 	"github.com/hashicorp/nomad/plugins/base/proto"
 	"github.com/hashicorp/nomad/plugins/shared/hclspec"
 )
@@ -12,12 +13,15 @@ import (
 // gRPC to communicate to the remote plugin.
 type BasePluginClient struct {
 	Client proto.BasePluginClient
+
+	// DoneCtx is closed when the plugin exits
+	DoneCtx context.Context
 }
 
 func (b *BasePluginClient) PluginInfo() (*PluginInfoResponse, error) {
-	presp, err := b.Client.PluginInfo(context.Background(), &proto.PluginInfoRequest{})
+	presp, err := b.Client.PluginInfo(b.DoneCtx, &proto.PluginInfoRequest{})
 	if err != nil {
-		return nil, err
+		return nil, grpcutils.HandleGrpcErr(err, b.DoneCtx)
 	}
 
 	var ptype string
@@ -31,29 +35,31 @@ func (b *BasePluginClient) PluginInfo() (*PluginInfoResponse, error) {
 	}
 
 	resp := &PluginInfoResponse{
-		Type:             ptype,
-		PluginApiVersion: presp.GetPluginApiVersion(),
-		PluginVersion:    presp.GetPluginVersion(),
-		Name:             presp.GetName(),
+		Type:              ptype,
+		PluginApiVersions: presp.GetPluginApiVersions(),
+		PluginVersion:     presp.GetPluginVersion(),
+		Name:              presp.GetName(),
 	}
 
 	return resp, nil
 }
 
 func (b *BasePluginClient) ConfigSchema() (*hclspec.Spec, error) {
-	presp, err := b.Client.ConfigSchema(context.Background(), &proto.ConfigSchemaRequest{})
+	presp, err := b.Client.ConfigSchema(b.DoneCtx, &proto.ConfigSchemaRequest{})
 	if err != nil {
-		return nil, err
+		return nil, grpcutils.HandleGrpcErr(err, b.DoneCtx)
 	}
 
 	return presp.GetSpec(), nil
 }
 
-func (b *BasePluginClient) SetConfig(data []byte) error {
+func (b *BasePluginClient) SetConfig(c *Config) error {
 	// Send the config
-	_, err := b.Client.SetConfig(context.Background(), &proto.SetConfigRequest{
-		MsgpackConfig: data,
+	_, err := b.Client.SetConfig(b.DoneCtx, &proto.SetConfigRequest{
+		MsgpackConfig:    c.PluginConfig,
+		NomadConfig:      c.AgentConfig.toProto(),
+		PluginApiVersion: c.ApiVersion,
 	})
 
-	return err
+	return grpcutils.HandleGrpcErr(err, b.DoneCtx)
 }
