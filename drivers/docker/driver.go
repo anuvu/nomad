@@ -660,6 +660,11 @@ func (d *Driver) createContainerConfig(task *drivers.TaskConfig, driverConfig *T
 		OpenStdin:  driverConfig.Interactive,
 	}
 
+	cgroupParent := ""
+	if d.config.CgroupParent != "" {
+		cgroupParent = d.config.CgroupParent
+	}
+
 	if driverConfig.WorkDir != "" {
 		config.WorkingDir = driverConfig.WorkDir
 	}
@@ -671,7 +676,8 @@ func (d *Driver) createContainerConfig(task *drivers.TaskConfig, driverConfig *T
 		// Binds are used to mount a host volume into the container. We mount a
 		// local directory for storage and a shared alloc directory that can be
 		// used to share data between different tasks in the same task group.
-		Binds: binds,
+		Binds:        binds,
+		CgroupParent: cgroupParent,
 
 		StorageOpt:   driverConfig.StorageOpt,
 		VolumeDriver: driverConfig.VolumeDriver,
@@ -719,6 +725,7 @@ func (d *Driver) createContainerConfig(task *drivers.TaskConfig, driverConfig *T
 		"cpu_shares", hostConfig.CPUShares, "cpu_quota", hostConfig.CPUQuota,
 		"cpu_period", hostConfig.CPUPeriod)
 	logger.Debug("binding directories", "binds", hclog.Fmt("%#v", hostConfig.Binds))
+	logger.Debug("driver.docker: using %s cgroup for %s", hostConfig.CgroupParent, task.Name)
 
 	//  set privileged mode
 	if driverConfig.Privileged && !d.config.AllowPrivileged {

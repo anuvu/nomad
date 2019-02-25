@@ -50,6 +50,9 @@ func PluginLoader(opts map[string]string) (map[string]interface{}, error) {
 	if v, ok := opts["docker.endpoint"]; ok {
 		conf["endpoint"] = v
 	}
+	if v, err := strconv.ParseBool(opts["docker.cgroup_parent"]); err == nil {
+		conf["cgroup_parent"] = v
+	}
 
 	// dockerd auth
 	authConf := map[string]interface{}{}
@@ -164,7 +167,8 @@ var (
 	//		}
 	//	}
 	configSpec = hclspec.NewObject(map[string]*hclspec.Spec{
-		"endpoint": hclspec.NewAttr("endpoint", "string", false),
+		"endpoint":      hclspec.NewAttr("endpoint", "string", false),
+		"cgroup_parent": hclspec.NewAttr("cgroup_parent", "string", false),
 
 		// docker daemon auth option for image registry
 		"auth": hclspec.NewBlock("auth", false, hclspec.NewObject(map[string]*hclspec.Spec{
@@ -483,6 +487,7 @@ type DriverConfig struct {
 	AllowPrivileged bool         `codec:"allow_privileged"`
 	AllowCaps       []string     `codec:"allow_caps"`
 	GPURuntimeName  string       `codec:"nvidia_runtime"`
+	CgroupParent    string       `codec:"cgroup_parent"`
 }
 
 type AuthConfig struct {
