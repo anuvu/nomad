@@ -929,7 +929,11 @@ DESTROY:
 	if err := h.container.Destroy(); err != nil {
 		h.logger.Printf("[ERR] driver.lxc: error destroying container %q: %v.", name, err)
 	} else {
-		h.logger.Printf("[INFO] driver.lxc: successfully destroyed container %q.", name)
+		if err := h.container.Release(); err != nil {
+			h.logger.Printf("[ERR] driver.lxc: failed to release container %q after successful destroy: %v", name, err)
+		} else {
+			h.logger.Printf("[INFO] driver.lxc: successfully destroyed and released container %q.", name)
+		}
 	}
 }
 
