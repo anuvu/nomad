@@ -16,7 +16,7 @@ Vagrant.configure(2) do |config|
 		vmCfg = configureLinuxProvisioners(vmCfg)
 
 		vmCfg.vm.synced_folder '.',
-			'/opt/gopath/src/github.com/anuvu/nomad'
+			'/opt/gopath/src/github.com/hashicorp/nomad'
 
 		vmCfg.vm.provision "shell",
 			privileged: false,
@@ -28,70 +28,6 @@ Vagrant.configure(2) do |config|
         # Expose Ember ports to the host (one for the site, one for livereload)
         vmCfg.vm.network :forwarded_port, guest: 4201, host: 4201, auto_correct: true
         vmCfg.vm.network :forwarded_port, guest: 49153, host: 49153, auto_correct: true
-	end
-
-	config.vm.define "freebsd", autostart: false, primary: false do |vmCfg|
-		vmCfg.vm.box = FREEBSD_BASE_BOX
-		vmCfg.vm.hostname = "freebsd"
-		vmCfg = configureProviders vmCfg,
-			cpus: suggestedCPUCores()
-
-		vmCfg.vm.synced_folder '.',
-			'/opt/gopath/src/github.com/hashicorp/nomad',
-			type: "nfs",
-			bsd__nfs_options: ['noatime']
-
-		vmCfg.vm.provision "shell",
-			privileged: true,
-			path: './scripts/vagrant-freebsd-priv-config.sh'
-
-		vmCfg.vm.provision "shell",
-			privileged: false,
-			path: './scripts/vagrant-freebsd-unpriv-bootstrap.sh'
-	end
-
-	# Test Cluster (Linux)
-	1.upto(3) do |n|
-		serverName = "nomad-server%02d" % [n]
-		clientName = "nomad-client%02d" % [n]
-		serverIP = "10.199.0.%d" % [10 + n]
-		clientIP = "10.199.0.%d" % [20 + n]
-
-		config.vm.define serverName, autostart: false, primary: false do |vmCfg|
-			vmCfg.vm.box = LINUX_BASE_BOX
-			vmCfg.vm.hostname = serverName
-			vmCfg = configureProviders(vmCfg)
-			vmCfg = configureLinuxProvisioners(vmCfg)
-
-			vmCfg.vm.provider "virtualbox" do |_|
-				vmCfg.vm.network :private_network, ip: serverIP
-			end
-
-			vmCfg.vm.synced_folder '.',
-				'/opt/gopath/src/github.com/hashicorp/nomad'
-
-			vmCfg.vm.provision "shell",
-				privileged: true,
-				path: './scripts/vagrant-linux-priv-zeroconf.sh'
-		end
-
-		config.vm.define clientName, autostart: false, primary: false do |vmCfg|
-			vmCfg.vm.box = LINUX_BASE_BOX
-			vmCfg.vm.hostname = clientName
-			vmCfg = configureProviders(vmCfg)
-			vmCfg = configureLinuxProvisioners(vmCfg)
-
-			vmCfg.vm.provider "virtualbox" do |_|
-				vmCfg.vm.network :private_network, ip: clientIP
-			end
-
-			vmCfg.vm.synced_folder '.',
-				'/opt/gopath/src/github.com/hashicorp/nomad'
-
-			vmCfg.vm.provision "shell",
-				privileged: true,
-				path: './scripts/vagrant-linux-priv-zeroconf.sh'
-		end
 	end
 end
 
