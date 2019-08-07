@@ -300,6 +300,7 @@ func convertServerConfig(agentConfig *Config, logOutput io.Writer) (*nomad.Confi
 	conf.DisableTaggedMetrics = agentConfig.Telemetry.DisableTaggedMetrics
 	conf.DisableDispatchedJobSummaryMetrics = agentConfig.Telemetry.DisableDispatchedJobSummaryMetrics
 	conf.BackwardsCompatibleMetrics = agentConfig.Telemetry.BackwardsCompatibleMetrics
+	conf.NodeID = agentConfig.Server.NodeID
 
 	return conf, nil
 }
@@ -445,7 +446,6 @@ func (a *Agent) clientConfig() (*clientconfig.Config, error) {
 		// Default no_host_uuid to true
 		conf.NoHostUUID = true
 	}
-
 	// Setup the ACLs
 	conf.ACLEnabled = a.config.ACL.Enabled
 	conf.ACLTokenTTL = a.config.ACL.TokenTTL
@@ -572,6 +572,13 @@ func (a *Agent) setupNodeID(config *nomad.Config) error {
 		config.NodeID = nodeID
 		return nil
 	}
+	a.logger.Printf("[ERR] agent: server nodeid: %s", config.NodeID)
+	a.logger.Printf("[ERR] agent: server nodeid: %s", a.config.Server.NodeID)
+
+	if a.config.Server.NodeID != "" {
+		config.NodeID = a.config.Server.NodeID
+	}
+	a.logger.Printf("[ERR] agent: server nodeid: %s", config.NodeID)
 
 	// If they've configured a node ID manually then just use that, as
 	// long as it's valid.
@@ -647,7 +654,7 @@ func (a *Agent) setupClient() error {
 			return err
 		}
 	}
-
+	conf.NodeID = a.config.Client.NodeID
 	client, err := client.NewClient(conf, a.consulCatalog, a.consulService, a.logger)
 	if err != nil {
 		return fmt.Errorf("client setup failed: %v", err)

@@ -182,7 +182,8 @@ type Client struct {
 
 	// baseLabels are used when emitting tagged metrics. All client metrics will
 	// have these tags, and optionally more.
-	baseLabels []metrics.Label
+	baseLabels   []metrics.Label
+	clientnodeid string
 }
 
 var (
@@ -223,6 +224,7 @@ func NewClient(cfg *config.Config, consulCatalog consul.CatalogAPI, consulServic
 		triggerDiscoveryCh:   make(chan struct{}),
 		triggerNodeUpdate:    make(chan struct{}, 8),
 		triggerEmitNodeEvent: make(chan *structs.NodeEvent, 8),
+		clientnodeid:         cfg.NodeID,
 	}
 
 	// Initialize the server manager
@@ -828,12 +830,15 @@ func (c *Client) NumAllocs() int {
 // high-entropy random UUID.
 func (c *Client) nodeID() (id, secret string, err error) {
 	var hostID string
+	hostID = c.clientnodeid
+	c.logger.Printf("[ERR] agent: client nodeid: %s", hostID)
 	hostInfo, err := host.Info()
 	if !c.config.NoHostUUID && err == nil {
 		if hashed, ok := helper.HashUUID(hostInfo.HostID); ok {
 			hostID = hashed
 		}
 	}
+	c.logger.Printf("[ERR] agent: client nodeid: %s", hostID)
 
 	if hostID == "" {
 		// Generate a random hostID if no constant ID is available on

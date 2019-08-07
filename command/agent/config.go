@@ -220,6 +220,9 @@ type ClientConfig struct {
 
 	// ServerJoin contains information that is used to attempt to join servers
 	ServerJoin *ServerJoin `mapstructure:"server_join"`
+
+	// NodeID is the uuid of this server.
+	NodeID string `mapstructure:"node_id"`
 }
 
 // ACLConfig is configuration specific to the ACL system
@@ -355,6 +358,9 @@ type ServerConfig struct {
 
 	// ServerJoin contains information that is used to attempt to join servers
 	ServerJoin *ServerJoin `mapstructure:"server_join"`
+
+	// NodeID is the uuid of this server.
+	NodeID string `mapstructure:"node_id"`
 }
 
 // ServerJoin is used in both clients and servers to bootstrap connections to
@@ -1154,6 +1160,9 @@ func (a *ServerConfig) Merge(b *ServerConfig) *ServerConfig {
 	if b.ServerJoin != nil {
 		result.ServerJoin = result.ServerJoin.Merge(b.ServerJoin)
 	}
+	if b.NodeID != "" {
+		result.NodeID = b.NodeID
+	}
 
 	// Add the schedulers
 	result.EnabledSchedulers = append(result.EnabledSchedulers, b.EnabledSchedulers...)
@@ -1263,6 +1272,9 @@ func (a *ClientConfig) Merge(b *ClientConfig) *ClientConfig {
 
 	if b.ServerJoin != nil {
 		result.ServerJoin = result.ServerJoin.Merge(b.ServerJoin)
+	}
+	if b.NodeID != "" {
+		result.NodeID = b.NodeID
 	}
 
 	return &result
